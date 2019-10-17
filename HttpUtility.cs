@@ -69,7 +69,7 @@ public class HttpUtility
 		int p_end = text.IndexOf(end, p_start);
 		if (p_end < 0)
 			return null;
-		offset += p_end + end.Length;
+		offset = p_end + end.Length;
 		return text.Substring(p_start, p_end - p_start);
 	}
 
