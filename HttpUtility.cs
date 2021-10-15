@@ -8,6 +8,8 @@ using RequestParams = System.Collections.Generic.Dictionary<string, object>;
 
 public class HttpUtility
 {
+	public static Encoding defaultEncoding;
+
 	/// <summary>
 	/// 设置连接数限制，代理
 	/// </summary>
@@ -20,36 +22,40 @@ public class HttpUtility
 	/// <summary>
 	/// HTTP GET
 	/// </summary>
-	public static string GetText(string url, RequestParams data = null)
+	public static string GetText(string url, RequestParams data = null,
+		Action<HttpWebRequest> action = null)
 	{
-		var req = _BuildGetRequest(url, data);
+		var req = _BuildGetRequest(url, data, action);
 		return _GetResponseText(req);
 	}
 
 	/// <summary>
 	/// HTTP GET, copy to output
 	/// </summary>
-	public static void GetStream(string url, Stream output, RequestParams data = null)
+	public static void GetStream(string url, Stream output, RequestParams data = null,
+		Action<HttpWebRequest> action = null)
 	{
-		var req = _BuildGetRequest(url, data);
+		var req = _BuildGetRequest(url, data, action);
 		_WriteResponseToStream(req, output);
 	}
 
 	/// <summary>
 	/// HTTP POST (x-www-form-urlencoded)
 	/// </summary>
-	public static string PostText(string url, RequestParams data = null)
+	public static string PostText(string url, RequestParams data = null,
+		Action<HttpWebRequest> action = null)
 	{
-		var req = _BuildPostRequest(url, data);
+		var req = _BuildPostRequest(url, data, action);
 		return _GetResponseText(req);
 	}
 
 	/// <summary>
 	/// HTTP POST (x-www-form-urlencoded), copy to output
 	/// </summary>
-	public static void PostStream(string url, Stream output, RequestParams data = null)
+	public static void PostStream(string url, Stream output, RequestParams data = null,
+		Action<HttpWebRequest> action = null)
 	{
-		var req = _BuildPostRequest(url, data);
+		var req = _BuildPostRequest(url, data, action);
 		_WriteResponseToStream(req, output);
 	}
 
@@ -69,7 +75,7 @@ public class HttpUtility
 		int p_end = text.IndexOf(end, p_start);
 		if (p_end < 0)
 			return null;
-		offset += p_end + end.Length;
+		offset = p_end + end.Length;
 		return text.Substring(p_start, p_end - p_start);
 	}
 
@@ -83,9 +89,26 @@ public class HttpUtility
 	}
 
 	/// <summary>
+	/// 从text中寻找介于start和end之间的字符串
+	/// </summary>
+	public static IEnumerable<string> FindAllBetween(string text, string start, string end)
+	{
+		int offset = 0;
+		string found = null;
+		do
+		{
+			found = FindBetween(text, start, end, ref offset);
+			if (found != null)
+				yield return found;
+		}
+		while (found != null);
+	}
+
+	/// <summary>
 	/// 构造Get请求
 	/// </summary>
-	static HttpWebRequest _BuildGetRequest(string url, RequestParams data)
+	static HttpWebRequest _BuildGetRequest(string url, RequestParams data,
+		Action<HttpWebRequest> action)
 	{
 		//如果传入了data，则先构造请求url
 		if (data != null && data.Count > 0)
@@ -108,17 +131,20 @@ public class HttpUtility
 
 		HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
 		req.Method = "GET";
+		action?.Invoke(req);
 		return req;
 	}
 
 	/// <summary>
 	/// 构造Post请求 (x-www-form-urlencoded)
 	/// </summary>
-	static HttpWebRequest _BuildPostRequest(string url, RequestParams data)
+	static HttpWebRequest _BuildPostRequest(string url, RequestParams data,
+		Action<HttpWebRequest> action)
 	{
 		HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
 		req.Method = "POST";
 		req.ContentType = "application/x-www-form-urlencoded";
+		action?.Invoke(req);
 		//写入数据
 		if (data != null && data.Count > 0)
 		{
@@ -153,9 +179,15 @@ public class HttpUtility
 			if (!_PreCheckResponse(resp))
 				return "";
 
-			string charSet = resp.CharacterSet;
-			Encoding enc = string.IsNullOrEmpty(charSet) ? Encoding.UTF8
-				: Encoding.GetEncoding(charSet);
+			Encoding enc;
+			if (defaultEncoding != null)
+				enc = defaultEncoding;
+			else
+			{
+				string charSet = resp.CharacterSet;
+				enc = string.IsNullOrEmpty(charSet) ? Encoding.UTF8
+					: Encoding.GetEncoding(charSet);
+			}
 
 			using (StreamReader reader = new StreamReader(resp.GetResponseStream(), enc))
 				return reader.ReadToEnd();
