@@ -40,6 +40,16 @@ public class HttpUtility
 	}
 
 	/// <summary>
+	/// HTTP GET, copy to output
+	/// </summary>
+	public static void GetStream(string url, Stream output, Action<int, int> progReporter,
+		RequestParams data = null, Action<HttpWebRequest> action = null)
+	{
+		var req = _BuildGetRequest(url, data, action);
+		_WriteResponseToStream(req, output, progReporter);
+	}
+
+	/// <summary>
 	/// HTTP POST (x-www-form-urlencoded)
 	/// </summary>
 	public static string PostText(string url, RequestParams data = null,
@@ -206,6 +216,35 @@ public class HttpUtility
 
 			using (Stream respStream = resp.GetResponseStream())
 				respStream.CopyTo(stream);
+		}
+	}
+
+	/// <summary>
+	/// 将请求结果写入stream
+	/// </summary>
+	static void _WriteResponseToStream(HttpWebRequest req, Stream stream, Action<int, int> progReporter)
+	{
+		using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+		{
+			if (!_PreCheckResponse(resp))
+				return;
+
+			var length = (int)resp.ContentLength;
+			using (Stream respStream = resp.GetResponseStream())
+			{
+				var buffer = new byte[4096];
+				var totalRead = 0;
+				int read;
+
+				do
+				{
+					read = respStream.Read(buffer, 0, 4096);
+					totalRead += read;
+					stream.Write(buffer, 0, read);
+					progReporter(totalRead, length);
+				}
+				while (read > 0);
+			}
 		}
 	}
 
